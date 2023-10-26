@@ -1,85 +1,166 @@
-import React, { useState, useEffect } from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import './App.css';
-import { Header } from './components/Header'
-import { Users } from './components/Users'
-import { DisplayBoard } from './components/DisplayBoard'
-import CreateUser from './components/CreateUser'
-import { getAllUsers, createUser } from './services/UserService'
+import React, { useState } from "react";
+import "./App.css";
+import { Header } from "./components/Header";
+import { DisplayBoard } from "./components/DisplayBoard";
+import { createNft } from "./services/UserService";
+import { create } from "ipfs-http-client";
+import { Buffer } from "buffer";
+
+var jsonIpfs = "";
 
 function App() {
+  const [images, setImages] = useState([]);
+  const [count, setCount] = useState(-1);
 
-  const [user, setUser] = useState({})
-  const [users, setUsers] = useState([])
-  const [numberOfUsers, setNumberOfUsers] = useState(0)
-
-
-  const userCreate = (e) => {
-
-      createUser(user)
-        .then(response => {
-          console.log(response);
-          setNumberOfUsers(numberOfUsers+1)
-      });
+  let ipfsTypes;
+  try {
+    ipfsTypes = create({
+      url: "https://ipfs.infura.io:5001/api/v0",
+    });
+  } catch (error) {
+    console.error("IPFS error ", error);
+    ipfsTypes = undefined;
   }
 
-  const fetchAllUsers = () => {
-    getAllUsers()
-      .then(users => {
-        console.log(users)
-        setUsers(users);
-        setNumberOfUsers(users.length)
-      });
-  }
+  const onSubmitHandler = async (event) => {
+    event.preventDefault();
+    const formTypes = event.target;
+    const filesTypes = formTypes[0].files;
 
-  useEffect(() => {
-    getAllUsers()
-      .then(users => {
-        console.log(users)
-        setUsers(users);
-        setNumberOfUsers(users.length)
-      });
-  }, [])
+    if (!filesTypes || filesTypes.length === 0) {
+      return alert("No files selected");
+    }
 
-  const onChangeForm = (e) => {
-      if (e.target.name === 'firstname') {
-          user.firstName = e.target.value;
-      } else if (e.target.name === 'lastname') {
-          user.lastName = e.target.value;
-      } else if (e.target.name === 'email') {
-          user.email = e.target.value;
-      }
-      setUser(user)
-  }
-  
-    
-    return (
-        <div className="App">
-          <Header></Header>
-          <div className="container mrgnbtm">
-            <div className="row">
-              <div className="col-md-8">
-                  <CreateUser 
-                    user={user}
-                    onChangeForm={onChangeForm}
-                    createUser={userCreate}
-                    >
-                  </CreateUser>
-              </div>
-              <div className="col-md-4">
-                  <DisplayBoard
-                    numberOfUsers={numberOfUsers}
-                    getAllUsers={fetchAllUsers}
-                  >
-                  </DisplayBoard>
-              </div>
-            </div>
-          </div>
-          <div className="row mrgnbtm">
-            <Users users={users}></Users>
-          </div>
-        </div>
+    const fileTypes = filesTypes[0];
+    // upload files
+    const result = await ipfsTypes.add(fileTypes);
+
+    setImages([
+      ...images,
+      {
+        cid: result.cid,
+        path: result.path,
+      },
+    ]);
+    setCount((prevCount) => prevCount + 1);
+
+    const jsonFile = {
+      name: "VEENFT",
+      creator: "AK",
+      description: "IPFS NFT",
+      image: `https://ipfs.infura.io/ipfs/${images[count].path}`,
+      type: "image/png",
+      format: "none",
+      properties: {
+        license: "MIT-0",
+        collection: "Veehive Collection",
+        website: "https://veehive.ai/",
+      },
+      attributes: [
+        {
+          trait_type: "coolness",
+          value: "50",
+          "max-value": "100",
+        },
+        {
+          trait_type: "colour",
+          value: "gradient",
+        },
+      ],
+    };
+
+    const encodedJsonObject = Buffer.from(JSON.stringify(jsonFile)).toString(
+      "base64"
     );
+
+    const decodedJsonObject = Buffer.from(encodedJsonObject, "base64").toString(
+      "ascii"
+    );
+    // console.log(decodedJsonObject);
+
+    const jsonUpload = await ipfsTypes.add(decodedJsonObject);
+
+    jsonIpfs = `https://ipfs.infura.io/ipfs/${jsonUpload.path}`;
+    formTypes.reset();
+    console.log(`This is IPFS: ${jsonIpfs}`);
+  };
+
+  const fetchNft = () => {
+    createNft(nftDetails).then((users) => {
+      console.log(users);
+    });
+    // console.log(jsonIpfs);
+  };
+  // const fetchNft = (jsonIpfs) => {
+  //   createNft(jsonIpfs).then((users) => {
+  //     console.log(users);
+  //   });
+  //   // console.log(jsonIpfs);
+  // };
+
+  const [nftDetails, setNftDetails] = useState({ name: "", symbol: "" });
+
+  const handleChange = (e) => {
+    setNftDetails((prevState) => ({
+      ...prevState,
+      [e.target.name]: e.target.value,
+    }));
+  };
+
+  return (
+    <div className="App">
+      <Header></Header>
+      <div className="main-body">
+        <input
+          onChange={handleChange}
+          placeholder="Name"
+          name="name"
+          value={nftDetails.name}
+        />
+        <input
+          onChange={handleChange}
+          placeholder="Symbol"
+          name="symbol"
+          value={nftDetails.symbol}
+        />
+      </div>
+      <div className="display-board">
+        <DisplayBoard createNft={() => fetchNft(nftDetails)}></DisplayBoard>
+      </div>
+      {/* <div>
+        <header className="">
+          {!ipfsTypes && (
+            <p>
+              Oh oh, Not connected to IPFS. Checkout out the logs for errors
+            </p>
+          )}
+        </header>
+
+        {ipfsTypes && (
+          <>
+            <p>Upload File using IPFS</p>
+
+            <form onSubmit={onSubmitHandler}>
+              <input name="file" type="file" />
+
+              <button type="submit">Upload File</button>
+            </form>
+
+            <div>
+              {images.map((image, index) => (
+                <img
+                  alt={`Uploaded #${index + 1}`}
+                  src={"https://ipfs.infura.io/ipfs/" + image.path}
+                  style={{ maxWidth: "400px", margin: "15px" }}
+                  key={image.cid.toString() + index}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div> */}
+    </div>
+  );
 }
 
 export default App;
